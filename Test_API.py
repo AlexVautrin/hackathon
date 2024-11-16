@@ -12,6 +12,7 @@ requete_nappes = os.getenv('URL_API_NAPPES')
 requete_riviere = os.getenv('URL_API_RIVIERES')
 requete_meteo = os.getenv('URL_API_METEO')
 
+
 def get_request(url_api) :
     request = requests.get(url_api)
     result = request.json()
