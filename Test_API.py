@@ -1,20 +1,16 @@
 import os
 import requests
 from dotenv import load_dotenv
-
-#TODO: recuperer recommandations en cas de sécheresse 
+from fastapi import FastAPI
 
 load_dotenv()
 
-commune = os.getenv('COMMUNE')
-latitude = os.getenv('LATITUDE')
-longitude = os.getenv('LONGITUDE')
+app = FastAPI()
 
-requete_gravite = f'https://api.vigieau.gouv.fr/api/zones?lon={longitude}&lat={latitude}&commune={commune}'
+requete_gravite = os.getenv('URL_API_GRAVITE')
 requete_nappes = os.getenv('URL_API_NAPPES')
 requete_riviere = os.getenv('URL_API_RIVIERES')
 requete_meteo = os.getenv('URL_API_METEO')
-
 
 def get_request(url_api) :
     request = requests.get(url_api)
@@ -61,12 +57,55 @@ def create_dict_gravite(gravite, date_debut, date_fin):
     return dict_gravite
 
 def get_nappes():
-    return get_request(requete_nappes)
+    return get_request(requete_nappes)["data"]
 
 def get_riviere():
-    return get_request(requete_riviere)
+    return get_request(requete_riviere)["data"]
 
+def get_meteo():
+    response = get_request(requete_meteo)
+    if "hourly" not in response:
+        return response
 
-print(get_nappes())
-print(get_riviere())
-print(create_dict_gravite(get_gravite(), get_date_debut(), get_date_fin()))
+    hourly_data = response["hourly"]
+    times = hourly_data.get("time", [])
+    temperatures = hourly_data.get("temperature_2m", [])
+    humidities = hourly_data.get("relative_humidity_2m", [])
+    precipitations = hourly_data.get("precipitation", [])
+
+    grouped_data = []
+    for i in range(len(times)):
+        temperature = temperatures[i] if i < len(temperatures) else None
+        humidity = humidities[i] if i < len(humidities) else None
+        precipitation = precipitations[i] if i < len(precipitations) else None
+
+        if temperature is not None or humidity is not None or precipitation is not None:
+            grouped_data.append({
+                "time": times[i],
+                "temperature": temperature,
+                "humidity": humidity,
+                "precipitation": precipitation
+            })
+
+    response["hourly"] = grouped_data
+    return response["hourly"]
+
+#Route pour les nappes
+@app.get("/nappes")
+async def nappes_info():
+    return get_nappes()
+
+#Route pour les rivières
+@app.get("/rivieres")
+async def rivieres_info():
+    return get_riviere()
+
+#Route pour la gravité
+@app.get("/gravite")
+async def gravite_info():
+    return create_dict_gravite(get_gravite(), get_date_debut(), get_date_fin())
+
+#Route pour la météo
+@app.get("/meteo")
+async def meteo_info():
+    return get_meteo()
